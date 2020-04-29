@@ -6,6 +6,9 @@ Some basic examples of
 - Median blur
 - Correlation and Template matching
 - Sobel Filter
+- Laplacian Filter
+- Image Sharpen
+- Bi-Lateral Filter
 ## Authors
 
     Shai Aharon - TA and a Gentleman
