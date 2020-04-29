@@ -261,14 +261,193 @@ def edgeDetect() -> None:
     plt.show()
 
 
+def laplacian() -> None:
+    """
+    Laplacian demo, 2nd derivation of the image
+    :return: None
+    """
+    img = cv2.imread('face.png', cv2.IMREAD_GRAYSCALE) / 255.0
+
+    der_k = np.array([1, -1]).astype(float)
+    lap_y = np.convolve(der_k, der_k).reshape(-1, 1)
+    lap_y = np.pad(lap_y, pad_width=((0, 0), (1, 1)))
+    lap_x = lap_y.T
+    lap_xy = lap_x + lap_y
+
+    img_smooth = cv2.GaussianBlur(img, (5, 5), 1)
+    img_lap = cv2.filter2D(img_smooth, -1, lap_xy, cv2.BORDER_REFLECT)
+    img_lap_sign = np.sign(img_lap)
+
+    img_disp = ((img_lap - img_lap.min()) ** 2 + img_lap.min() ** 2) * img_lap_sign
+
+    f, ax = plt.subplots(1, 3)
+    ax[0].set_title('Original')
+    ax[1].set_title('Laplacian')
+    ax[2].set_title('Enhanched Laplacian')
+    ax[0].imshow(img)
+    ax[1].imshow(img_lap, cmap='gray')
+    f2 = ax[2].imshow(img_disp, cmap='hot')
+    plt.colorbar(f2, ax=ax[2], fraction=0.046, pad=0.04)
+
+    plt.show()
+
+
+def shapren()-> None:
+    """
+    Demo of sharpening an image
+    :return: None
+    """
+    img = cv2.imread('eye.jpg', cv2.IMREAD_GRAYSCALE) / 255.0
+
+    org_I = np.array([
+        [0, 0, 0],
+        [0, 1, 0],
+        [0, 0, 0],
+    ])
+    lap_ker = np.array([
+        [0, 1, 0],
+        [1, -4, 1],
+        [0, 1, 0],
+    ])
+    img_sharp = cv2.filter2D(img, -1, org_I - lap_ker, cv2.BORDER_REFLECT)
+
+    plt.gray()
+    plt.close()
+    f, ax = plt.subplots(1, 2)
+    ax[0].set_title('Original')
+    ax[1].set_title('Sharpened')
+    ax[0].imshow(img, vmin=0, vmax=1)
+    ax[1].imshow(img_sharp, vmin=0, vmax=1)
+
+    plt.show()
+
+
+def bilateral_demo()->None:
+    """
+    Bi-Lateral filter demo
+    :return: None
+    """
+    img = cv2.imread('eye.jpg', cv2.IMREAD_GRAYSCALE) / 255.0
+
+    k2_size = 10
+    y, x = 300, 667
+
+    pivot_v = img[y, x]
+    neighbor_hood = img[y - k2_size:y + k2_size + 1, x - k2_size:x + k2_size + 1]
+
+    diff = pivot_v - neighbor_hood
+    sigma = .01
+    diff_gau = np.exp(-np.power(diff, 2) / (2 * sigma))
+    gaus = cv2.getGaussianKernel(2 * k2_size + 1, k2_size)
+    gaus = gaus.dot(gaus.T)
+    combo = gaus * diff_gau
+
+    f, ax = plt.subplots(2, 3)
+    plt.set_cmap('jet')
+    ax[0, 0].set_title('Original')
+    ax[0, 1].set_title('Neighborhood')
+    ax[1, 0].set_title('Difference')
+    ax[1, 1].set_title('Diff X Gaussian')
+    ax[0, 0].imshow(img, cmap='gray')
+    ax[0, 0].plot(x, y, 'ro', picker=3)
+    ax[0, 1].imshow(neighbor_hood)
+    ax[0, 1].plot(k2_size, k2_size, 'rx', picker=3)
+    diff_f = ax[1, 0].imshow(diff_gau)
+    plt.colorbar(diff_f, ax=ax[1, 0], fraction=0.046, pad=0.04)
+    gau_f = ax[1, 1].imshow(gaus)
+    plt.colorbar(gau_f, ax=ax[1, 1], fraction=0.046, pad=0.04)
+    combo_f = ax[1, 2].imshow(combo / combo.sum())
+    plt.colorbar(combo_f, ax=ax[1, 2], fraction=0.046, pad=0.04)
+
+    plt.show()
+
+
+def bilateral_patch(patch: np.ndarray, gauss_kernel: np.ndarray, sigma_color: float) -> float:
+    """
+    Applies a Bi-Lateral filter for a single patch
+    :param patch: Input patch
+    :param gauss_kernel: Gaussian kernel
+    :param sigma_color: The Sigma for the color exp
+    :return: The new value for the middle of  the patch
+    """
+    p_xy = patch.shape[0] // 2
+    pivot = patch[p_xy, p_xy]
+
+    diff = pivot - patch
+    diff_mat = np.exp(-np.power(diff, 2) / (2 * sigma_color ** 2))
+
+    combo = diff_mat * gauss_kernel * patch
+    combo = combo / (diff_mat * gauss_kernel).sum()
+    return combo.mean()
+
+
+def bilateralFilter(img: np.ndarray, kernel_size: float, sigma_color: float, sigma_spatial: float) -> np.ndarray:
+    """
+    Applies a Bi-Lateral filter on an image
+    :param img: Input image (grayscale)
+    :param kernel_size: Kernel size
+    :param sigma_color: The Sigma for the color exp
+    :param sigma_spatial: The Sigma for the Gaussian filter
+    :return: Bi-Lateraled image
+    """
+    pad = kernel_size
+    gau_kl = cv2.getGaussianKernel(kernel_size, sigma_spatial)
+    gau_kl = gau_kl.dot(gau_kl.T)
+    gau_kl /= gau_kl.sum()
+
+    img_pad = np.pad(img, pad)
+    img_bifilt = np.zeros_like(img)
+
+    h, w = img.shape[:2]
+    for y in range(h):
+        for x in range(w):
+            im_patch = img_pad[pad + y:pad + y + kernel_size, pad + x:pad + x + kernel_size]
+            img_bifilt[y, x] = bilateral_patch(im_patch, gau_kl, sigma_color)
+
+    return img_bifilt
+
+
+def bilateralFull()->None:
+    """
+    Full Bi-Lateral Demo
+    :return: None
+    """
+    img = cv2.imread('eye.jpg', cv2.IMREAD_GRAYSCALE) / 255.0
+
+    k_size = 11
+
+    img_bifilt = bilateralFilter(img, k_size, sigma_color=k_size / 4, sigma_spatial=k_size / 4)
+    img_bifilt_2 = bilateralFilter(img_bifilt, k_size, sigma_color=k_size / 4, sigma_spatial=k_size / 4)
+
+    f, ax = plt.subplots(1, 4)
+    ax[0].set_title('Original')
+    ax[1].set_title('Box Filter')
+    ax[2].set_title('Bi-Lateral')
+    ax[3].set_title('Bi-Lateral^2')
+
+    ax[0].imshow(img)
+    ax[1].imshow(cv2.filter2D(
+        (img * 255).astype(np.uint8),
+        -1,
+        np.ones((k_size, k_size)) / k_size ** 2)
+    )
+    ax[2].imshow(img_bifilt)
+    ax[3].imshow(img_bifilt_2)
+    plt.show()
+
+
 def main():
-    # filterBasic()
-    # filterMedian()
-    # corrSimple()
-    # corrAdv(use_ncc=False)
-    # corrAdv(use_ncc=True)
+    filterBasic()
+    filterMedian()
+    corrSimple()
+    corrAdv(use_ncc=False)
+    corrAdv(use_ncc=True)
     edgeDetect()
-    # filterSobel()
+    filterSobel()
+    laplacian()
+    shapren()
+    bilateral_demo()
+    bilateralFull()
 
 
 if __name__ == '__main__':
